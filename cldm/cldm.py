@@ -22,7 +22,7 @@ from ldm.models.diffusion.ddim import DDIMSampler
 class ControlledUnetModel(UNetModel):
     def forward(self, x, timesteps=None, context=None, control=None, only_mid_control=False, **kwargs):
         hs = []
-        with torch.no_grad():
+        with torch.no_grad(): # diffusion model is not trained
             t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
             emb = self.time_embed(t_emb)
             h = x.type(self.dtype)
@@ -38,7 +38,7 @@ class ControlledUnetModel(UNetModel):
             if only_mid_control or control is None:
                 h = torch.cat([h, hs.pop()], dim=1)
             else:
-                h = torch.cat([h, hs.pop() + control.pop()], dim=1)
+                h = torch.cat([h, hs.pop() + control.pop()], dim=1) # adding in control residual input
             h = module(h, emb, context)
 
         h = h.type(x.dtype)
@@ -285,12 +285,12 @@ class ControlNet(nn.Module):
         t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
         emb = self.time_embed(t_emb)
 
-        guided_hint = self.input_hint_block(hint, emb, context)
+        guided_hint = self.input_hint_block(hint, emb, context) # context = prompt text embedding
 
         outs = []
 
         h = x.type(self.dtype)
-        for module, zero_conv in zip(self.input_blocks, self.zero_convs):
+        for module, zero_conv in zip(self.input_blocks, self.zero_convs): # loop through Unet encoder (14 blocks)?
             if guided_hint is not None:
                 h = module(h, emb, context)
                 h += guided_hint
@@ -329,9 +329,9 @@ class ControlLDM(LatentDiffusion):
         assert isinstance(cond, dict)
         diffusion_model = self.model.diffusion_model
 
-        cond_txt = torch.cat(cond['c_crossattn'], 1)
+        cond_txt = torch.cat(cond['c_crossattn'], 1) # list to tensor [B, 77, 768]
 
-        if cond['c_concat'] is None:
+        if cond['c_concat'] is None: # cond['c_concat'] = control input
             eps = diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=None, only_mid_control=self.only_mid_control)
         else:
             control = self.control_model(x=x_noisy, hint=torch.cat(cond['c_concat'], 1), timesteps=t, context=cond_txt)
