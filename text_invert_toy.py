@@ -92,9 +92,9 @@ def train(conf):
 
     optimizer = torch.optim.AdamW([
         {'name': 'text_embed', 'params': [prompt_embed], 'lr': 1e-5},
-        {'name': 'diffusion_decoder', 
-         'params': list(model.model.diffusion_model.output_blocks.parameters()) + list(model.model.diffusion_model.out.parameters()), 
-         'lr': 1e-5},
+        # {'name': 'diffusion_decoder', 
+        #  'params': list(model.model.diffusion_model.output_blocks.parameters()) + list(model.model.diffusion_model.out.parameters()), 
+        #  'lr': 1e-5},
         ], lr=0.)
     
     if resume:
