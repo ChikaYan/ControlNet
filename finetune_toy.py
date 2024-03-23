@@ -138,6 +138,7 @@ def train(conf):
                                                     num_workers=4,
                                                     )
 
+    NO_HEAD = conf.get('dataset.no_head', False)
 
 
     N_EPOCHS = conf['n_epochs']
@@ -166,6 +167,10 @@ def train(conf):
             # control needs to be in [0, 1]
             # gt needs to be in [-1, 1]
 
+            if NO_HEAD:
+                head_mask = einops.rearrange(ground_truth['head_mask'].reshape([B, H, W, 1]), 'b h w c -> b c h w')
+                gt[head_mask.repeat([1,3,1,1]) > 0.] = 1.
+
 
             encoder_posterior = model.encode_first_stage(gt) # VAE encoder
             z = model.get_first_stage_encoding(encoder_posterior).detach() # sample from VAE latent
@@ -177,7 +182,9 @@ def train(conf):
             loss, loss_dict = model(z, cond)
 
 
-            # z_decode = model.decode_first_stage(z)
+            z_decode = model.decode_first_stage(z)
+            torchvision.utils.save_image((torch.concat([z_decode, gt], axis=0)+ 1.) / 2., 'gt_encode.png')
+
 
             optimizer.zero_grad()
             loss.backward()
@@ -214,6 +221,9 @@ def train(conf):
                 B, _, H, W = control.shape
                 gt = einops.rearrange(test_data['rgb'][None,...].reshape([B, H, W, 3]), 'b h w c -> b c h w').float()
                 gt = gt * 2. - 1.
+                if NO_HEAD:
+                    head_mask = einops.rearrange(ground_truth['head_mask'].reshape([B, H, W, 1]), 'b h w c -> b c h w')
+                    gt[head_mask.repeat([1,3,1,1]) > 0.] = 1.
 
                 pred = log_image(
                         model=model,
@@ -256,6 +266,9 @@ def train(conf):
         B, _, H, W = control.shape
         gt = einops.rearrange(ground_truth['rgb'].reshape([B, H, W, 3]), 'b h w c -> b c h w').float()
         gt = gt * 2. - 1.
+        if NO_HEAD:
+            head_mask = einops.rearrange(ground_truth['head_mask'].reshape([B, H, W, 1]), 'b h w c -> b c h w')
+            gt[head_mask.repeat([1,3,1,1]) > 0.] = 1.
 
                 
         pred = log_image(
@@ -279,7 +292,7 @@ def train(conf):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--conf', type=str)
+    parser.add_argument('--conf', type=str, default='conf/finetune/default.conf')
     opt = parser.parse_args()
 
     conf = ConfigFactory.parse_file(opt.conf)
@@ -288,7 +301,7 @@ if __name__ == '__main__':
         project='finetune_diffusion_toy', 
         name=conf['run_name'], 
         group=conf['subject'], 
-        config=conf, 
+        config=conf.as_plain_ordered_dict(), 
         mode=conf['wandb_mode'],
         )
     train(conf)
